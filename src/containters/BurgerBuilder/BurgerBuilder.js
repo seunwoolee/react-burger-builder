@@ -9,25 +9,109 @@ import Spinner from "../../components/UI/Spinner/Spinner";
 import axios from "../../axios-orders";
 import withErrorHandler from "../../hoc/withErrorHandler/withErrorHandler";
 import * as actionType from '../../store/actions'
+import Button from "../../components/UI/Button/Button";
 
 
 class BurgerBuilder extends Component {
 
     state = {
         purchaseing: false,
+        installButton: null,
         error: false,
         loading: false
     }
 
+    installPrompt = null
 
-    componentDidMount() {
-        // axios.get('https://react-burger-builder-ab747.firebaseio.com/ingredients.json')
-        //     .then(response => {
-        //         this.setState({ingredients: response.data})
-        //     })
-        //     .catch(error => {
-        //         this.setState({error: true})
-        //     })
+    componentDidMount(){
+        // let self = this;
+        console.log("[componentDidMount] beforeinstallprompt");
+        window.addEventListener('beforeinstallprompt',e=>{
+            e.preventDefault();
+            console.log("Install Prompt fired");
+            this.installPrompt = e;
+            // See if the app is already installed, in that case, do nothing
+            if((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true){
+                return false;
+            }
+            // Set the state variable to make button visible
+            this.setState({
+                installButton:true
+            })
+        })
+
+        console.log("[componentDidMount] notificationclick");
+    }
+
+    installApp = async ()=> {
+        console.log(this.installPrompt);
+        if(!this.installPrompt) return false;
+        this.installPrompt.prompt();
+
+        let outcome = await this.installPrompt.userChoice;
+        if(outcome.outcome ==='accepted'){
+            console.log("App Installed")
+        }
+        else {
+            console.log("App not installed");
+        }
+        // Remove the event reference
+        this.installPrompt=null;
+        // Hide the button
+        this.setState({
+            installButton:false
+        })
+    }
+
+    displayConfirmNotification = () => {
+        if('serviceWorker' in navigator) {
+            const options = {
+                body: '이승우짱',
+                icon: '/favicon_192.png',
+                actions: [
+                    {action: 'confirm', title: '확인', icon: '/favicon_192.png'},
+                    {action: 'cancel', title: '취소', icon: '/favicon_192.png'}
+                ]
+            };
+            navigator.serviceWorker.ready
+                .then(swreg => {
+                swreg.showNotification('서비스워커에서 Notification 실행', options);
+            })
+        }
+        // new Notification('Successfully subscribed!',options);
+    }
+
+    askForNotificationPermission = () => {
+        Notification.requestPermission(result => {
+            console.log('User chocie', result);
+            if(result !== 'granted') {
+                console.log('No notification permission granted');
+            } else {
+                this.displayConfirmNotification();
+            }
+        })
+    }
+
+    configurePushSub = () => {
+        if(!('serviceWorker' in navigator)){
+            return;
+        }
+        let reg;
+        navigator.serviceWorker.ready
+            .then(swreg => {
+                reg = swreg;
+                return swreg.pushManager.getSubscription();
+            })
+            .then(sub => {
+                if(sub ===null) {
+                    reg.pushManager.subscribe({
+                        userVisibleOnly: true
+                    });
+                } else {
+
+                }
+            })
+
     }
 
     updatePruchaseState (ingredients) {
@@ -76,6 +160,9 @@ class BurgerBuilder extends Component {
                         ordered={this.purchaseHandler}
                         price={this.props.price}
                     />
+                    <button onClick={this.installApp}>Install App</button>
+                    <button onClick={this.askForNotificationPermission}>Notification 구독</button>
+
                 </Aux>
             )
 
