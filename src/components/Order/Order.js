@@ -6,7 +6,6 @@ const order = (props) => {
     const ingredients = []
 
     for (let ingredientName in props.ingredients) {
-        console.log(ingredientName, props.ingredients[ingredientName])
         ingredients.push({name: ingredientName, amount: props.ingredients[ingredientName]})
     }
 
@@ -17,7 +16,6 @@ const order = (props) => {
     return (
         <div className={classes.Order}>
             {outputIngredients}
-            {/*<p>Ingredients: {props.ingredients.bacon}</p>*/}
             <p>Price: <strong>USD {Number.parseFloat(props.price).toFixed(2)}</strong></p>
         </div>
     )
