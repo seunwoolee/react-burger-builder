@@ -8,6 +8,8 @@
 // To learn more about the benefits of this model, read https://goo.gl/KwvDNy.
 // This link also includes instructions on opting out of this behavior.
 
+export let swRegistration = null;
+
 const isLocalhost = Boolean(
   window.location.hostname === 'localhost' ||
     // [::1] is the IPv6 localhost address.
@@ -50,14 +52,16 @@ export default function register() {
         });
       } else {
         // Is not local host. Just register service worker
-        registerValidSW(swUrl);
+          registerValidSW(swUrl).then(reg => {
+              swRegistration=reg;
+          })
       }
     });
   // }
 }
 
 function registerValidSW(swUrl) {
-  navigator.serviceWorker
+  return navigator.serviceWorker
     .register(swUrl)
     .then(registration => {
       registration.onupdatefound = () => {
@@ -79,6 +83,7 @@ function registerValidSW(swUrl) {
           }
         };
       };
+      return registration
     })
     .catch(error => {
       console.error('Error during service worker registration:', error);
@@ -102,7 +107,10 @@ function checkValidServiceWorker(swUrl) {
         });
       } else {
         // Service worker found. Proceed as normal.
-        registerValidSW(swUrl);
+        // registerValidSW(swUrl);
+          registerValidSW(swUrl).then(reg => {
+              swRegistration=reg;
+          })
       }
     })
     .catch(() => {

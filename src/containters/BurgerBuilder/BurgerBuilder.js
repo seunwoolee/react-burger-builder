@@ -10,15 +10,17 @@ import axios from "../../axios-orders";
 import withErrorHandler from "../../hoc/withErrorHandler/withErrorHandler";
 import * as actions from '../../store/actions/index'
 
+import {swRegistration} from '../../registerServiceWorker'
 
 class BurgerBuilder extends Component {
 
     state = {
         purchaseing: false,
         installButton: null,
-    }
+        isSubscribed: false
+    };
 
-    installPrompt = null
+    installPrompt = null;
 
     componentDidMount(){
         window.addEventListener('beforeinstallprompt',e=>{
@@ -33,13 +35,13 @@ class BurgerBuilder extends Component {
             this.setState({
                 installButton:true
             })
-        })
+        });
 
         this.props.onInitIngredients()
 
     }
 
-    installApp = async ()=> {
+    installApp = async () => {
         console.log(this.installPrompt);
         if(!this.installPrompt) return false;
         this.installPrompt.prompt();
@@ -57,7 +59,22 @@ class BurgerBuilder extends Component {
         this.setState({
             installButton:false
         })
-    }
+    };
+
+    checkSubscribe = () => {
+        return swRegistration.pushManager.getSubscription()
+            .then((subscription) => {
+                if(subscription){
+                    this.setState({isSubscribed: true});
+                }
+
+                if (this.state.isSubscribed) {
+                    console.log('User IS subscribed.', subscription);
+                } else {
+                    console.log('User is NOT subscribed.');
+                }
+            });
+    };
 
     displayConfirmNotification = () => {
         if('serviceWorker' in navigator) {
@@ -74,8 +91,7 @@ class BurgerBuilder extends Component {
                 swreg.showNotification('서비스워커에서 Notification 실행', options);
             })
         }
-        // new Notification('Successfully subscribed!',options);
-    }
+    };
 
     askForNotificationPermission = () => {
         Notification.requestPermission(result => {
@@ -83,31 +99,48 @@ class BurgerBuilder extends Component {
             if(result !== 'granted') {
                 console.log('No notification permission granted');
             } else {
+                this.checkSubscribe()
+                    .then(() => !this.state.isSubscribed ? this.setPushSubscribe() : null);
                 this.displayConfirmNotification();
             }
         })
-    }
+    };
 
-    configurePushSub = () => {
+    setPushSubscribe = () => {
+        console.log('구독진행');
+        const applicationServerPublicKey = 'BBvGTYHuHHla8VcJjlLFyFpBM6iU-uaSqw5Afqgi_EkB9ctCvMRMKThD4_VJj8j9XZh8QdZf9O9HSjPcjc6jIZE';
+        const applicationServerKey = this.urlB64ToUint8Array(applicationServerPublicKey);
         if(!('serviceWorker' in navigator)){
             return;
         }
-        let reg;
-        navigator.serviceWorker.ready
-            .then(swreg => {
-                reg = swreg;
-                return swreg.pushManager.getSubscription();
-            })
-            .then(sub => {
-                if(sub ===null) {
-                    reg.pushManager.subscribe({
-                        userVisibleOnly: true
-                    });
-                } else {
+        swRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey
+        })
+        .then(subscription => {
+            this.updateSubscriptionOnServer(subscription)
+        })
+    };
 
-                }
-            })
+    updateSubscriptionOnServer(subscription){
+        // TODO: Send subscription to application server
+        console.log('User is subscribed:', subscription.toJSON());
+    }
 
+
+    urlB64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/\-/g, '+')
+            .replace(/_/g, '/');
+
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
     }
 
     updatePruchaseState (ingredients) {
@@ -117,33 +150,38 @@ class BurgerBuilder extends Component {
             })
             .reduce((sum, el) => {
                 return sum + el
-            }, 0)
+            }, 0);
         return sum > 0
     }
 
     purchaseHandler = () => {
-        this.setState({purchaseing: true})
-    }
+        if(this.props.isAuthenticated) {
+            this.setState({purchaseing: true});
+        } else {
+            this.props.onSetAuthRedirectPath('/checkout');
+            this.props.history.push('/auth');
+        }
+    };
 
     purchaseCancelHandler = () => {
         this.setState({purchaseing: false})
-    }
+    };
 
     purchaseContinueHandler = (state) => {
         this.props.onInitPurchase();
         this.props.history.push('/checkout')
-    }
+    };
 
     render() {
         const disabledInfo = {
             ...this.props.ings
-        }
+        };
 
         for(let key in disabledInfo){
             disabledInfo[key] = disabledInfo[key] <= 0
         }
-        let orderSummary = null
-        let burger = this.props.error ? <p>Ingredients can't be loaded!</p> : <Spinner/>
+        let orderSummary = null;
+        let burger = this.props.error ? <p>Ingredients can't be loaded!</p> : <Spinner/>;
 
         if(this.props.ings) {
             burger = (
@@ -155,13 +193,14 @@ class BurgerBuilder extends Component {
                         disabled={disabledInfo}
                         purchaseable={this.updatePruchaseState(this.props.ings)}
                         ordered={this.purchaseHandler}
+                        isAuth={this.props.isAuthenticated}
                         price={this.props.price}
                     />
                     <button onClick={this.installApp}>Install App</button>
                     <button onClick={this.askForNotificationPermission}>Notification 구독</button>
 
                 </Aux>
-            )
+            );
 
             orderSummary = <OrderSummary
             price={this.props.price}
@@ -188,17 +227,19 @@ const mapStateToProps = state => {
     return {
         ings: state.burgerBuilder.ingredients,
         price: state.burgerBuilder.totalPrice,
-        error: state.burgerBuilder.error
+        error: state.burgerBuilder.error,
+        isAuthenticated: state.auth.token !== null
     }
-}
+};
 
 const mapDispatchToProps = dispatch => {
     return {
         onIngredientAdded: (ingName) => dispatch(actions.addIngreient(ingName)),
         onIngredientRemoved: (ingName) => dispatch(actions.removeIngreient(ingName)),
         onInitIngredients: () => dispatch(actions.initIngredients()),
-        onInitPurchase: () => dispatch(actions.purchaseInit())
+        onInitPurchase: () => dispatch(actions.purchaseInit()),
+        onSetAuthRedirectPath: (path) => dispatch(actions.setAuthRedirectPath(path))
     }
-}
+};
 
 export default connect(mapStateToProps, mapDispatchToProps)(withErrorHandler(BurgerBuilder, axios));
